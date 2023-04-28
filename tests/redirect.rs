@@ -345,6 +345,38 @@ async fn test_redirect_https_only_enforced_gh1312() {
     assert!(err.is_redirect());
 }
 
+#[cfg(feature = "cookies")]
+#[tokio::test]
+async fn test_request_cookie_store() {
+    let code = 302;
+    let server = server::http(move |req| async move {
+        if req.uri() == "/302" {
+            http::Response::builder()
+                .status(302)
+                .header("location", "/dst")
+                .header("set-cookie", "key=value")
+                .body(Default::default())
+                .unwrap()
+        } else {
+            assert_eq!(req.uri(), "/dst");
+            assert_eq!(req.headers()["cookie"], "key=value");
+            http::Response::default()
+        }
+    });
+
+    let url = format!("http://{}/{}", server.addr(), code);
+    let dst = format!("http://{}/{}", server.addr(), "dst");
+
+    let client = reqwest::ClientBuilder::new()
+        .build()
+        .unwrap();
+
+    let res = client.get(&url).cookie_store(true).send().await.unwrap();
+
+    assert_eq!(res.url().as_str(), dst);
+    assert_eq!(res.status(), reqwest::StatusCode::OK);
+}
+
 #[tokio::test]
 async fn test_request_redirect() {
     let code = 301u16;

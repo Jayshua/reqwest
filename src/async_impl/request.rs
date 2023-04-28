@@ -3,6 +3,11 @@ use std::fmt;
 use std::future::Future;
 use std::time::Duration;
 
+#[cfg(feature="cookies")]
+use std::sync::Arc;
+#[cfg(feature="cookies")]
+use crate::cookie::CookieStore;
+
 use serde::Serialize;
 #[cfg(feature = "json")]
 use serde_json;
@@ -27,6 +32,7 @@ pub struct Request {
     timeout: Option<Duration>,
     version: Version,
     redirect_policy: Option<redirect::Policy>,
+    pub(crate) cookie_store: Option<Arc<dyn CookieStore>>,
 }
 
 /// A builder to construct the properties of a `Request`.
@@ -50,6 +56,7 @@ impl Request {
             timeout: None,
             version: Version::default(),
             redirect_policy: None,
+            cookie_store: None,
         }
     }
 
@@ -202,6 +209,28 @@ impl RequestBuilder {
             request: crate::Result::Ok(request),
         }
     }
+
+    /// Set whether to use cookies set in a redirect in the subsequent request
+    pub fn cookie_store(mut self, persist: bool) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            if persist {
+                req.cookie_store = Some(Arc::new(crate::cookie::Jar::default()));
+            } else {
+                req.cookie_store = None;
+            }
+        }
+        self
+    }
+
+
+    /// Set the request's cookie provider
+    pub fn cookie_provider<C: CookieStore + 'static>(mut self, cookie_store: Arc<C>) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            req.cookie_store = Some(cookie_store);
+        }
+        self
+    }
+
 
     /// Add a `Header` to this Request.
     pub fn header<K, V>(self, key: K, value: V) -> RequestBuilder
@@ -646,6 +675,7 @@ where
             timeout: None,
             version,
             redirect_policy: None,
+            cookie_store: None,
         })
     }
 }
